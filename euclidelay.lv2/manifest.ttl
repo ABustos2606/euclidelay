@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2026 Alejandro Bustos
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://github.com/ABustos2606/euclidelay#euclidelay>
+    a lv2:Plugin ;
+    lv2:binary <euclidelay.so> ;
+    rdfs:seeAlso <euclidelay.ttl> .

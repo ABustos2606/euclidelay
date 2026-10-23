@@ -3,8 +3,9 @@
 A delay whose echoes fall on Euclidean rhythms, written for Peepo and other LV2 hosts.
 GPL-2.0-or-later, Copyright (c) 2026 Alejandro Bustos; see [LICENSE](LICENSE).
 
-**Status, 23 October 2026: planned.** This repository holds the spec and the
-implementation plan only. Nothing is built yet.
+**Status, 23 October 2026: milestone 0, scaffolding.** The plugin builds,
+has all its ports and loads in jalv and Ingen, but plays the dry sound
+only: no echoes yet.
 
 Euclidelay has four voices, each switched on or off on its own, so one, two,
 three or four can play in any combination. Each voice spreads a number of
@@ -31,7 +32,8 @@ Build on Linux with a C++17 compiler, GNU Make, pkg-config and LV2 headers
 
 ```sh
 make                                       # build/euclidelay.lv2
-make test
+make test                                  # ttl_check and the sliced plugin test
+make test-hosts                            # jalv and Ingen (source Peepo's env.sh for its Ingen)
 make install PREFIX=/usr/local
 make install LV2DIR=/opt/peepo/lib/lv2     # where Peepo finds plugins
 make OPT="-O2 -mcpu=cortex-a76"            # native Pi build

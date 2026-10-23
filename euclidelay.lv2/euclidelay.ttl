@@ -1,0 +1,368 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) 2026 Alejandro Bustos
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+
+<https://github.com/ABustos2606/euclidelay#euclidelay>
+    a lv2:Plugin, lv2:DelayPlugin ;
+    doap:name "Euclidelay" ;
+    doap:license <https://spdx.org/licenses/GPL-2.0-or-later> ;
+    doap:maintainer [ foaf:name "Alejandro Bustos" ; foaf:homepage <https://github.com/ABustos2606> ] ;
+    doap:homepage <https://github.com/ABustos2606/euclidelay> ;
+    rdfs:comment "Echoes on four Euclidean rhythms. Each voice loops its pattern with feedback, with its own level and pan." ;
+    lv2:minorVersion 0 ;
+    lv2:microVersion 1 ;
+    lv2:optionalFeature lv2:hardRTCapable ;
+    lv2:port
+    [
+        a lv2:InputPort, lv2:AudioPort ;
+        lv2:index 0 ;
+        lv2:symbol "in" ;
+        lv2:name "In"
+    ],
+    [
+        a lv2:OutputPort, lv2:AudioPort ;
+        lv2:index 1 ;
+        lv2:symbol "out_l" ;
+        lv2:name "Out L"
+    ],
+    [
+        a lv2:OutputPort, lv2:AudioPort ;
+        lv2:index 2 ;
+        lv2:symbol "out_r" ;
+        lv2:name "Out R"
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 3 ;
+        lv2:symbol "enabled" ;
+        lv2:name "Enabled" ;
+        lv2:default 1 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, lv2:toggled ;
+        lv2:designation lv2:enabled
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 4 ;
+        lv2:symbol "bpm" ;
+        lv2:name "BPM" ;
+        lv2:default 120.0 ;
+        lv2:minimum 30.0 ;
+        lv2:maximum 300.0 ;
+        units:unit units:bpm
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 5 ;
+        lv2:symbol "step" ;
+        lv2:name "Step" ;
+        lv2:default 2 ;
+        lv2:minimum 0 ;
+        lv2:maximum 6 ;
+        lv2:portProperty lv2:integer, lv2:enumeration ;
+        lv2:scalePoint [ rdfs:label "1/32" ; rdf:value 0 ] , [ rdfs:label "1/16T" ; rdf:value 1 ] ,
+            [ rdfs:label "1/16" ; rdf:value 2 ] , [ rdfs:label "1/8T" ; rdf:value 3 ] ,
+            [ rdfs:label "1/8" ; rdf:value 4 ] , [ rdfs:label "1/8 dot" ; rdf:value 5 ] ,
+            [ rdfs:label "1/4" ; rdf:value 6 ]
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 6 ;
+        lv2:symbol "dry" ;
+        lv2:name "Dry" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 7 ;
+        lv2:symbol "echoes" ;
+        lv2:name "Echoes" ;
+        lv2:default 0.8 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 8 ;
+        lv2:symbol "tone" ;
+        lv2:name "Tone" ;
+        lv2:default 0.7 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 9 ;
+        lv2:symbol "voice_1" ;
+        lv2:name "Voice 1" ;
+        lv2:default 1 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, lv2:toggled
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 10 ;
+        lv2:symbol "steps_1" ;
+        lv2:name "Steps 1" ;
+        lv2:default 8 ;
+        lv2:minimum 1 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 11 ;
+        lv2:symbol "hits_1" ;
+        lv2:name "Hits 1" ;
+        lv2:default 3 ;
+        lv2:minimum 0 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 12 ;
+        lv2:symbol "shift_1" ;
+        lv2:name "Shift 1" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 15 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 13 ;
+        lv2:symbol "feedback_1" ;
+        lv2:name "Feedback 1" ;
+        lv2:default 0.5 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 0.95
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 14 ;
+        lv2:symbol "level_1" ;
+        lv2:name "Level 1" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 15 ;
+        lv2:symbol "pan_1" ;
+        lv2:name "Pan 1" ;
+        lv2:default -0.6 ;
+        lv2:minimum -1.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 16 ;
+        lv2:symbol "voice_2" ;
+        lv2:name "Voice 2" ;
+        lv2:default 1 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, lv2:toggled
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 17 ;
+        lv2:symbol "steps_2" ;
+        lv2:name "Steps 2" ;
+        lv2:default 5 ;
+        lv2:minimum 1 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 18 ;
+        lv2:symbol "hits_2" ;
+        lv2:name "Hits 2" ;
+        lv2:default 2 ;
+        lv2:minimum 0 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 19 ;
+        lv2:symbol "shift_2" ;
+        lv2:name "Shift 2" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 15 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 20 ;
+        lv2:symbol "feedback_2" ;
+        lv2:name "Feedback 2" ;
+        lv2:default 0.5 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 0.95
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 21 ;
+        lv2:symbol "level_2" ;
+        lv2:name "Level 2" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 22 ;
+        lv2:symbol "pan_2" ;
+        lv2:name "Pan 2" ;
+        lv2:default 0.6 ;
+        lv2:minimum -1.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 23 ;
+        lv2:symbol "voice_3" ;
+        lv2:name "Voice 3" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, lv2:toggled
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 24 ;
+        lv2:symbol "steps_3" ;
+        lv2:name "Steps 3" ;
+        lv2:default 7 ;
+        lv2:minimum 1 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 25 ;
+        lv2:symbol "hits_3" ;
+        lv2:name "Hits 3" ;
+        lv2:default 4 ;
+        lv2:minimum 0 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 26 ;
+        lv2:symbol "shift_3" ;
+        lv2:name "Shift 3" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 15 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 27 ;
+        lv2:symbol "feedback_3" ;
+        lv2:name "Feedback 3" ;
+        lv2:default 0.5 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 0.95
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 28 ;
+        lv2:symbol "level_3" ;
+        lv2:name "Level 3" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 29 ;
+        lv2:symbol "pan_3" ;
+        lv2:name "Pan 3" ;
+        lv2:default -0.2 ;
+        lv2:minimum -1.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 30 ;
+        lv2:symbol "voice_4" ;
+        lv2:name "Voice 4" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, lv2:toggled
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 31 ;
+        lv2:symbol "steps_4" ;
+        lv2:name "Steps 4" ;
+        lv2:default 4 ;
+        lv2:minimum 1 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 32 ;
+        lv2:symbol "hits_4" ;
+        lv2:name "Hits 4" ;
+        lv2:default 3 ;
+        lv2:minimum 0 ;
+        lv2:maximum 16 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 33 ;
+        lv2:symbol "shift_4" ;
+        lv2:name "Shift 4" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 15 ;
+        lv2:portProperty lv2:integer
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 34 ;
+        lv2:symbol "feedback_4" ;
+        lv2:name "Feedback 4" ;
+        lv2:default 0.5 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 0.95
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 35 ;
+        lv2:symbol "level_4" ;
+        lv2:name "Level 4" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 1.0
+    ],
+    [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 36 ;
+        lv2:symbol "pan_4" ;
+        lv2:name "Pan 4" ;
+        lv2:default 0.2 ;
+        lv2:minimum -1.0 ;
+        lv2:maximum 1.0
+    ] .

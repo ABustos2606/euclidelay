@@ -148,12 +148,12 @@ A typical patch (amp, Euclidelay, reverb) for 30 minutes with controls being mov
 
 The repository builds a plugin that loads everywhere and passes the dry sound.
 
-- [ ] GitHub repository `https://github.com/ABustos2606/euclidelay` and its first commit (the user's).
-- [ ] `Makefile` with every target of section 2, `src/exports.map`.
-- [ ] `src/ports.hpp` and `euclidelay.lv2/euclidelay.ttl` with all 37 ports of the spec, their names, ranges, defaults and the Step enumeration; `manifest.ttl`; `doap:license`, `doap:maintainer`, `lv2:DelayPlugin`, `lv2:enabled` on port 3.
-- [ ] `lv2_entry.cpp`: descriptor, `instantiate` (allocates the four buffers), `activate`, `run` writing `Dry * in` to both outputs, `cleanup`.
-- [ ] `tests/ttl_check.py`; `test_lv2` (descriptor, URI, slicing with the dry-only plugin).
-- [ ] **Done when** `make`, `make test`, `make install DESTDIR=...` and `lv2lint` are clean under WSL, and Euclidelay loads in `jalv` and in WSL's Ingen.
+- [x] GitHub repository `https://github.com/ABustos2606/euclidelay` and its first commit (the user's).
+- [x] `Makefile` with every target of section 2, `src/exports.map`.
+- [x] `src/ports.hpp` and `euclidelay.lv2/euclidelay.ttl` with all 37 ports of the spec, their names, ranges, defaults and the Step enumeration; `manifest.ttl`; `doap:license`, `doap:maintainer`, `lv2:DelayPlugin`, `lv2:enabled` on port 3.
+- [x] `lv2_entry.cpp`: descriptor, `instantiate` (allocates the four buffers), `activate`, `run` writing `Dry * in` to both outputs, `cleanup`.
+- [x] `tests/ttl_check.py`; `test_lv2` (descriptor, URI, slicing with the dry-only plugin). `make test-hosts` (`tests/host_smoke.py`, as Discipline's): jalv, and Ingen with 1 and 4 threads on a private dummy JACK server, Dry on both outputs, every control saved and reloaded.
+- [x] **Done when** `make`, `make test`, `make install DESTDIR=...` and `lv2lint` are clean under WSL, and Euclidelay loads in `jalv` and in WSL's Ingen. Checked 23 October 2026: lv2lint gives only the author e-mail warning Sway has.
 
 ### Milestone 1: patterns and one voice (tag `v0.0.2`)
 
