@@ -3,8 +3,8 @@
 // The built plugin, run as Ingen runs it: each period split into slices at
 // random points, the audio pointers moved to each slice. With fixed controls
 // the output must match the same input run unsliced, sample for sample, as
-// other hosts run it. Milestone 0 also checks the output is Dry * In on both
-// sides.
+// other hosts run it. Also checks Dry * In on both sides with Echoes 0, and
+// voice 1's echoes and pan with an impulse.
 //   test_lv2 build/euclidelay.lv2/euclidelay.so
 #include "../src/ports.hpp"
 #include <lv2/core/lv2.h>
@@ -110,25 +110,59 @@ int main(int argc, char** argv) {
         const std::vector<float> x = input();
         Controls controls = defaults();
         const Output reference = play(d, x, controls, false, false);
-        dry_only(reference, x, 1.0f, "defaults, unsliced");
         same(play(d, x, controls, true, false), reference, "defaults, sliced as Ingen runs it");
         same(play(d, x, controls, true, true), reference, "defaults, sliced, in place");
 
-        controls[dry] = 0.7f;
+        controls[voice_port(0, steps)] = 7;
+        controls[voice_port(0, hits)] = 4;
+        controls[voice_port(0, shift)] = 2;
+        controls[voice_port(0, feedback)] = 0.95f;
+        controls[voice_port(0, pan)] = 0.3f;
+        controls[tone] = 0.1f;
         controls[voice_port(2, voice)] = 1;
         controls[voice_port(3, voice)] = 1;
         controls[bpm] = 300;
         controls[step] = 0;
         const Output changed = play(d, x, controls, false, false);
-        dry_only(changed, x, 0.7f, "Dry 0.7, unsliced");
-        same(play(d, x, controls, true, false), changed, "Dry 0.7, sliced as Ingen runs it");
+        same(play(d, x, controls, true, false), changed, "voice 1 at 7/4/2, 1/32 at 300 BPM, sliced as Ingen runs it");
+        same(play(d, x, controls, true, true), changed, "voice 1 at 7/4/2, sliced, in place");
 
+        controls = defaults();
+        controls[echoes] = 0;
+        dry_only(play(d, x, controls, true, false), x, 1.0f, "Echoes 0");
+        controls[dry] = 0.7f;
+        dry_only(play(d, x, controls, true, false), x, 0.7f, "Dry 0.7, Echoes 0");
         controls[dry] = NAN;
         dry_only(play(d, x, controls, true, false), x, 1.0f, "a non-finite Dry counts as its default");
         controls[dry] = 5;
         dry_only(play(d, x, controls, true, false), x, 1.0f, "Dry above its range is clamped");
+        controls = defaults();
+        controls[voice_port(0, voice)] = 0;
+        dry_only(play(d, x, controls, true, false), x, 1.0f, "voice 1 off");
 
-        std::puts("PASS test_lv2: one descriptor and URI; sliced as Ingen runs it, unsliced and in place give the same output, Dry * In");
+        // An impulse through voice 1 at its defaults (8 steps, 3 hits:
+        // x.x..x.., Feedback 0.5, Pan -0.6), 1/32 at 300 BPM: 1200 samples a
+        // step, a loop of 9600. Tone 1 keeps the impulses whole.
+        controls = defaults();
+        controls[bpm] = 300;
+        controls[step] = 0;
+        controls[tone] = 1;
+        controls[dry] = 0;
+        std::vector<float> impulse(length, 0.0f);
+        impulse[0] = 1;
+        const Output o = play(d, impulse, controls, true, false);
+        const double angle = (kPorts[voice_port(0, pan)].def + 1) * M_PI / 4, echo = kPorts[echoes].def;
+        const struct { uint32_t at; double level; } echoes_at[] = {
+            {2400, 1}, {6000, 1}, {9600, 0.5}, {12000, 0.5}, {15600, 0.5}, {19200, 0.25}, {21600, 0.25}, {25200, 0.25}};
+        std::vector<double> want(length, 0.0);
+        for (const auto& e : echoes_at) want[e.at] = e.level * echo;
+        for (uint32_t i = 0; i < length; ++i)
+            require(std::fabs(o.left[i] - want[i] * std::cos(angle)) < 1e-6 &&
+                        std::fabs(o.right[i] - want[i] * std::sin(angle)) < 1e-6,
+                    "voice 1 impulse: wrong output at frame " + std::to_string(i));
+
+        std::puts("PASS test_lv2: one descriptor and URI; sliced as Ingen runs it, unsliced and in place give the same "
+                  "output; Dry * In; voice 1's echoes and pan");
         dlclose(library);
     } catch (const std::exception& e) { std::printf("FAIL test_lv2: %s\n", e.what()); return 1; }
 }

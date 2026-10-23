@@ -159,13 +159,13 @@ The repository builds a plugin that loads everywhere and passes the dry sound.
 
 One voice, fixed settings, exactly right.
 
-- [ ] `tools/gen_patterns.sh` and the generated `tests/patterns_peepo.inc`.
-- [ ] `src/pattern.hpp` written from the spec, and `test_pattern` passing on every entry.
-- [ ] Step time from Step and BPM; `L` and `D_k` from section 3.4.
-- [ ] `Voice`: loop buffer, taps, step-0 subtraction, feedback, Tone in the feedback path. No fades yet: settings are applied at `activate`.
-- [ ] Voice 1 wired into `run()`, panned with the spec's law; voices 2 to 4 silent.
-- [ ] `test_voice` passing; `test_lv2` slicing still passing.
-- [ ] **Done when** an impulse in jalv gives the 7/4 pattern by ear and in a recording (Audacity or a test WAV), at 120 BPM, 1/16.
+- [x] `tools/gen_patterns.sh` and the generated `tests/patterns_peepo.inc` (all 4352 patterns, generated under WSL from Peepo's header).
+- [x] `src/pattern.hpp` written from the spec, and `test_pattern` passing on every entry.
+- [x] Step time from Step and BPM; `L` and `D_k` from section 3.4.
+- [x] `Voice`: loop buffer, taps, step-0 subtraction, feedback, Tone in the feedback path. No fades or smoothing yet: settings are read at the start of each slice and take effect at once (a change can click until milestone 3).
+- [x] Voice 1 wired into `run()`, panned with the spec's law and scaled by its Level and Echoes (no clipper yet); Voice 1 off silences it at once; voices 2 to 4 silent.
+- [x] `test_voice` passing; `test_lv2` slicing still passing, now with echoes, plus an impulse through voice 1 checking its times, levels and pan. All also with `SAN=1`; `make test-hosts` passes (it listens with Echoes 0); lv2lint gives only the author e-mail warning.
+- [ ] **Done when** an impulse in jalv gives the 7/4 pattern by ear and in a recording (Audacity or a test WAV), at 120 BPM, 1/16. An offline render (7/4, 120 BPM, 1/16) puts the echoes at steps 1, 3, 5, then 7, 8, 10, 12 at half level, as the spec says; listening in jalv is still to do.
 
 ### Milestone 2: four voices and the mix (tag `v0.0.3`)
 

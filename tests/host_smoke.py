@@ -29,7 +29,8 @@ PREFIXES = """@prefix patch: <http://lv2plug.in/ns/ext/patch#> .
 """
 LEVEL = 0.25
 # Values other than the defaults, for every control: saved, then reloaded.
-SAVED = {"enabled": 1, "bpm": 97, "step": 4, "dry": 0.5, "echoes": 0.3, "tone": 0.2}
+# Echoes 0: the probe listens for the dry sound alone, every sample the same.
+SAVED = {"enabled": 1, "bpm": 97, "step": 4, "dry": 0.5, "echoes": 0, "tone": 0.2}
 for n in range(1, 5):
     SAVED.update({f"voice_{n}": n % 2, f"steps_{n}": 10 + n, f"hits_{n}": n, f"shift_{n}": n + 1,
                   f"feedback_{n}": 0.1 * n, f"level_{n}": 1 - 0.1 * n, f"pan_{n}": 0.3 * n - 0.75})
@@ -160,7 +161,7 @@ def main():
             return lambda: observed == [LEVEL * gain, LEVEL * gain]
 
         name = "euclidelay_jalv"
-        host = launch("jalv", ["jalv", "-i", "-p", "-n", name, "-c", "dry=0.5", URI])
+        host = launch("jalv", ["jalv", "-i", "-p", "-n", name, "-c", "dry=0.5", "-c", "echoes=0", URI])
         wait_for(lambda: bool(probe.get_ports(f"{name}:")), "jalv did not load Euclidelay")
         time.sleep(0.5)  # JACK ports are registered before jalv activates its client.
         require(host.poll() is None, "jalv failed during activation")
@@ -196,7 +197,8 @@ def main():
             probe.connect(source, f"{client}:in")
             probe.connect(f"{client}:out_l", captures[0])
             probe.connect(f"{client}:out_r", captures[1])
-            wait_for(hears(1), f"Ingen: default Dry passes the input to both outputs, heard {observed}")
+            protocol.set("ingen:/main/euclidelay/echoes", 0)
+            wait_for(hears(1), f"Ingen: default Dry, Echoes 0, passes the input to both outputs, heard {observed}")
             for symbol, value in SAVED.items():
                 protocol.set(f"ingen:/main/euclidelay/{symbol}", value)
             wait_for(hears(SAVED["dry"]), f"Ingen: Dry {SAVED['dry']} on both outputs, heard {observed}")
