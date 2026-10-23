@@ -7,6 +7,7 @@
 // more, Hits 0 is silent.
 #include "../src/voice.hpp"
 #include "../src/ports.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -25,9 +26,15 @@ void require(bool ok, const std::string& what) { if (!ok) throw std::runtime_err
 // An impulse at sample 0 through a fresh voice, `frames` samples of output.
 std::vector<float> impulse(Voice& voice, const Taps& taps, float feedback, float tone, long frames) {
     voice.clear();
-    voice.set(taps, feedback, tone_pole(tone, rate));
-    std::vector<float> out(frames);
-    for (long t = 0; t < frames; ++t) out[t] = voice.process(t == 0 ? 1.0f : 0.0f);
+    voice.start(taps, feedback);
+    const std::vector<float> pole(kChunk, tone_pole(tone, rate));
+    std::vector<float> x(kChunk, 0.0f), out(frames);
+    x[0] = 1.0f;
+    for (long t = 0; t < frames; t += kChunk) {
+        const int n = static_cast<int>(std::min<long>(kChunk, frames - t));
+        voice.run(x.data(), pole.data(), out.data() + t, n);
+        x[0] = 0.0f;
+    }
     return out;
 }
 

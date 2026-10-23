@@ -86,7 +86,7 @@ class Voice {
 ### 3.2 Per sample, per voice
 
 ```
-a      = fade_left ? 1 - fade_left / F : 1          // F = 30 ms in samples; linear, tune to equal power
+a      = fade_left ? 1 - fade_left / F : 1          // F = 30 ms in samples; linear (milestone 3)
 back   = mix(y[w - cur.loop], y[w - next.loop], a)  // with no fade, just y[w - cur.loop]
 y[w]   = x_in + fb * tone(back)                     // x_in: input times the on/off fade
 v      = mix(sum_k y[w - cur.delay[k]], sum_k y[w - next.delay[k]], a)
@@ -98,7 +98,7 @@ When the fade ends: `cur = next`; if a pending setting differs, `next = pending`
 ### 3.3 Order of work in a slice
 
 1. Read the controls once, at the start of the slice. Turn Step and BPM into `S`, and each voice's Steps, Hits and Shift into a `Taps` through `pattern.hpp`. Compare with the voice's newest setting (`pending`, else `next`, else `cur`); if it changed, set a fade going or update `pending`.
-2. Process the slice voice by voice, skipping voices that are `Off`. A voice's loop is at least 1200 samples (1/32 at 300 BPM, 48 kHz), longer than any Ingen period, so a whole slice of `y` can be written before the taps are read. Each tap then reads a contiguous run of the buffer. That keeps the memory reads in order (6 MB buffers don't fit in cache) and lets the compiler vectorise the tap sums. If a slice is ever longer than the shortest loop, split it at that length. Per-sample smoothing and fades still run in the per-sample loop that writes `y`, so the result does not depend on where slices start.
+2. Process the slice voice by voice, skipping voices that are `Off`. A voice's loop is at least 1200 samples (1/32 at 300 BPM, 48 kHz), longer than any Ingen period, so a whole slice of `y` can be written before the taps are read (as built in milestone 3, runs of at most 256 samples, ending where a fade ends; taps read only finished samples, so loop length doesn't limit a run, only the 30 ms of buffer room past the longest loop does). Each tap then reads a contiguous run of the buffer. That keeps the memory reads in order (6 MB buffers don't fit in cache) and lets the compiler vectorise the tap sums. Per-sample smoothing and fades still run in the per-sample loop that writes `y`, so the result does not depend on where slices start.
 3. Pan, level, sum, clip, dry, write both outputs.
 
 Worst case per sample, all four voices on: 4 x (2 loop reads + 32 taps in a fade) = 136 reads and one write per voice. At 48 kHz that is about 6.5 M reads a second, little for a Pi 5 core, but the cache behaviour has to be measured, not assumed (milestone 4). Cost scales with the voices that are on: one voice is a quarter of it.
@@ -128,7 +128,7 @@ Worst case per sample, all four voices on: 4 x (2 loop reads + 32 taps in a fade
 | `test_voices` | a voice switched off fades out within 20 ms and then reads and writes nothing (its buffer is untouched afterwards); switched on again after echoes were in its loop, it plays none of them, only what came in after; off and on again within the fade does the same; switching causes no jump above the `test_changes` bound |
 | `test_changes` | each crossfaded control changed during a held sine: no sample-to-sample jump above a bound (**tune**, about -40 dB of the signal) at the moment of change; a knob dragged through 16 values costs at most two fades; a tempo change fades all four voices |
 | `test_lv2` | dlopen the built `.so`; one descriptor with the URI; the same input run sliced at random points (pointers moved per slice, as Ingen does) and unsliced, with fixed controls, matches sample for sample |
-| `test_timing` | 10 simulated minutes with random control changes every few blocks at 48 kHz and a 128-frame period: no non-finite output, and the worst block's time printed, against a budget of 25% of the period on the build machine |
+| `test_timing` | 10 simulated minutes with random control changes every few blocks at 48 kHz and a 128-frame period: no non-finite output, the output within Dry and the clipper's ceiling, and the block times printed; the 99.9th percentile must stay under a budget of 25% of the period on the build machine (the worst block is printed too; on a desktop it mostly measures scheduling) |
 
 ### 5.2 Desktop hosts
 
@@ -183,10 +183,10 @@ The whole sound, with settings fixed while playing.
 
 Every control can move during a note without a click.
 
-- [ ] Per-sample smoothers for Level, Pan (on the two gains), Feedback, Tone, Dry and Echoes.
-- [ ] The voice crossfade of section 3.2, with `pending`; Step and BPM fade every voice that is on.
-- [ ] Block-wise processing of section 3.3, split at the shortest loop if needed; the output must not change (compare with the per-sample version kept in the test).
-- [ ] `test_changes` and `test_timing` passing, also with `SAN=1`.
+- [x] Per-sample smoothers for Level, Pan (on the two gains), Feedback, Tone, Dry and Echoes: straight-line glides of 20 ms (`Glide` in `src/voice.hpp`), restarted from wherever they are on each new value, exact at the end. Tone glides on the filter's pole. A voice that is off, or coming on, takes its values at once.
+- [x] The voice crossfade of section 3.2, with `pending`; Step and BPM fade every voice that is on. The fade is linear in the mix `c + a * (n - c)`: taps common to the old and new settings and an unchanged loop read stay exactly as they were, which an equal-power fade would boost by up to 3 dB in the feedback path.
+- [x] Block-wise processing of section 3.3. No split at the shortest loop is needed: a run writes its `y` one sample at a time and every tap is at least one step back, so taps only read finished samples. What a run must not do is write over what its longest read still needs, so runs are at most 256 samples and at most the buffer's room past the longest loop (30 ms). Runs also end where a crossfade ends, so each part has fixed taps. `test_changes` compares the block-wise voice with the per-sample version kept in the test, sample for sample (exactly equal), over 40 s of random settings, switching and run lengths; breaking the old-life crossfade or the buffer wrap makes it fail.
+- [x] `test_changes` and `test_timing` passing, also with `SAN=1`. Worst second differences on a held 87 Hz sine at 0.05 are 1.6e-5 to 1.1e-4 against a bound of 5e-4 (-40 dB), the largest for Step and BPM changes; the same Shift change at once is above the bound. `test_timing` on the PC under WSL: median 7 us a 128-frame period, p99.9 about 50 us against a budget of 667 us; the worst period varies from 0.2 to 8 ms from run to run with the same input, so most likely WSL scheduling rather than the plugin (the Pi measurement is milestone 4). `make test-hosts` passes; lv2lint gives only the author e-mail warning.
 - [ ] Settle by listening: fade length and shape, smoothing time, Tone range, Feedback maximum, the clipper's knee, the pan law. Update the spec's **tune** values.
 - [ ] **Done when** dragging every control in Carla while playing makes no clicks, and a tempo change sounds like a speed change, not a glitch.
 

@@ -3,11 +3,11 @@
 A delay whose echoes fall on Euclidean rhythms, written for Peepo and other LV2 hosts.
 GPL-2.0-or-later, Copyright (c) 2026 Alejandro Bustos; see [LICENSE](LICENSE).
 
-**Status, 23 October 2026: milestone 2, four voices and the mix.** All four
-voices play, each switched on and off with a fade, panned and mixed through
-the echo clipper; Enabled leaves trails. Changes to the other controls take
-effect at once, with no smoothing or crossfade yet (they can click until
-milestone 3).
+**Status, 23 October 2026: milestone 3, changes while playing.** Every
+control can move while playing: Level, Pan, Feedback, Tone, Dry and Echoes
+glide over 20 ms, and Steps, Hits, Shift, Step and BPM crossfade each voice
+to its new pattern over 30 ms. The offline tests find no clicks; the fade
+and glide times are still to be settled by listening.
 
 Euclidelay has four voices, each switched on or off on its own, so one, two,
 three or four can play in any combination. Each voice spreads a number of
@@ -34,7 +34,7 @@ Build on Linux with a C++17 compiler, GNU Make, pkg-config and LV2 headers
 
 ```sh
 make                                       # build/euclidelay.lv2
-make test                                  # ttl_check, patterns, one voice, voices, engine, the sliced plugin test
+make test                                  # ttl_check, patterns, one voice, voices, engine, changes, the sliced plugin test, timing
 make test-hosts                            # jalv and Ingen (source Peepo's env.sh for its Ingen)
 make install PREFIX=/usr/local
 make install LV2DIR=/opt/peepo/lib/lv2     # where Peepo finds plugins

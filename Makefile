@@ -20,7 +20,7 @@ OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/obj/%.o,$(SOURCES))
 METADATA := manifest.ttl euclidelay.ttl
 TTL_TARGETS := $(addprefix $(BUNDLE)/,$(METADATA))
 TESTS := $(BUILD_DIR)/test_pattern $(BUILD_DIR)/test_voice $(BUILD_DIR)/test_voices $(BUILD_DIR)/test_engine \
-	$(BUILD_DIR)/test_lv2
+	$(BUILD_DIR)/test_changes $(BUILD_DIR)/test_lv2 $(BUILD_DIR)/test_timing
 ENGINE_OBJECTS := $(BUILD_DIR)/obj/engine.o $(BUILD_DIR)/obj/voice.o
 LV2_CFLAGS = $(shell $(PKG_CONFIG) --cflags lv2)
 # -fno-fast-math comes after OPT: the non-finite guard needs IEEE arithmetic
@@ -52,11 +52,11 @@ $(BUILD_DIR)/test_voice: tests/test_voice.cpp $(BUILD_DIR)/obj/voice.o src/voice
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMPILE_FLAGS) $< $(BUILD_DIR)/obj/voice.o $(LDFLAGS) $(SAN_FLAGS) -o $@
 
-$(BUILD_DIR)/test_voices $(BUILD_DIR)/test_engine: $(BUILD_DIR)/%: tests/%.cpp tests/engine_run.hpp $(ENGINE_OBJECTS) src/engine.hpp src/voice.hpp src/pattern.hpp src/ports.hpp
+$(BUILD_DIR)/test_voices $(BUILD_DIR)/test_engine $(BUILD_DIR)/test_changes: $(BUILD_DIR)/%: tests/%.cpp tests/engine_run.hpp $(ENGINE_OBJECTS) src/engine.hpp src/voice.hpp src/pattern.hpp src/ports.hpp
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMPILE_FLAGS) $< $(ENGINE_OBJECTS) $(LDFLAGS) $(SAN_FLAGS) -o $@
 
-$(BUILD_DIR)/test_lv2: tests/test_lv2.cpp src/ports.hpp
+$(BUILD_DIR)/test_lv2 $(BUILD_DIR)/test_timing: $(BUILD_DIR)/%: tests/%.cpp src/ports.hpp
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMPILE_FLAGS) $< $(LDFLAGS) $(SAN_FLAGS) -ldl -o $@
 
@@ -66,7 +66,9 @@ test: all $(TESTS)
 	$(BUILD_DIR)/test_voice
 	$(BUILD_DIR)/test_voices
 	$(BUILD_DIR)/test_engine
+	$(BUILD_DIR)/test_changes
 	$(BUILD_DIR)/test_lv2 $(BUNDLE)/euclidelay.so
+	$(BUILD_DIR)/test_timing $(BUNDLE)/euclidelay.so
 
 # jalv and Ingen on a private dummy JACK server (see tests/host_smoke.py).
 test-hosts: all

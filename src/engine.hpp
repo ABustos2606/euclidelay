@@ -8,9 +8,10 @@
 // The four voices and the mix (docs/design.md, "Mix and stereo", "On and
 // off", "Choosing voices"):
 //     out = Dry * x  +  Echoes * clip( sum over voices of Level * g(Pan) * v )
-// Milestone 2: Level, Pan, Feedback, Tone, Dry and Echoes take effect at the
-// start of each slice, with no smoothing yet; the Voice n switches and
-// Enabled fade.
+// Controls are read at the start of each slice. Level, Pan, Feedback, Tone,
+// Dry and Echoes glide to their new values sample by sample; Steps, Hits,
+// Shift, Step and BPM crossfade each voice to its new taps; the Voice n
+// switches and Enabled fade (docs/design.md, "Changes while playing").
 namespace euclidelay {
 
 // Enabled's fade of the input into the loops, in seconds.
@@ -65,14 +66,24 @@ public:
     const Voice& voice(uint32_t n) const { return voices_[n]; }
 
 private:
-    void apply(const Settings& settings);
+    // Settings into the voices and glides; at once (activate) or gliding
+    // and crossfading (run).
+    void apply(const Settings& settings, bool at_once);
     float enable_gain() const { return enable_ramp_ >= enable_fade_ ? 1.0f : enable_ramp_ * inv_enable_fade_; }
 
     double rate_ = 0;
+    int glide_ = 1;  // samples
+    int chunk_ = 1;  // a voice's longest run, at most kChunk
     Voice voices_[kVoices];
-    float gain_l_[kVoices] = {}, gain_r_[kVoices] = {};  // Level * pan gain
-    int enable_ramp_ = 0, enable_fade_ = 1;               // 0 off .. enable_fade_ on
+    Glide gain_l_[kVoices], gain_r_[kVoices];  // Level * pan gain
+    Glide pole_, dry_, echoes_;
+    bool enabled_ = false;
+    int enable_ramp_ = 0, enable_fade_ = 1;  // 0 off .. enable_fade_ on
     float inv_enable_fade_ = 1;
+
+    // One chunk at a time: the input, the input into the loops, Enabled's
+    // gain, the Tone pole, one voice's output and the two echo sums.
+    float x_[kChunk], into_[kChunk], on_[kChunk], poles_[kChunk], v_[kChunk], l_[kChunk], r_[kChunk];
 };
 
 } // namespace euclidelay

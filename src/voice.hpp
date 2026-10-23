@@ -4,22 +4,56 @@
 #include "pattern.hpp"
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 
 // One voice (docs/design.md, "One voice"): a loop buffer y written every
 // sample with the input plus the filtered loop,
 //     y[t] = x[t] + fb * tone(y[t - L])
 // and read at every hit,
 //     v[t] = sum over hits k of y[t - D_k]   minus   x[t] if step 0 is a hit.
-// Its Voice n switch fades it (docs/design.md, "Choosing voices"). Settings
-// take effect at once, with no crossfade yet (milestone 3).
+// Its Voice n switch fades it (docs/design.md, "Choosing voices"); a change
+// of its taps crossfades from the old ones to the new (docs/design.md,
+// "Changes while playing"; docs/implementation-plan.md, section 3.2).
 namespace euclidelay {
 
 // The Voice n switch's fade, in seconds (tune).
 inline constexpr double kSwitchSeconds = 0.020;
+// The crossfade between old and new taps, in seconds (tune).
+inline constexpr double kFadeSeconds = 0.030;
+// How long Level, Pan, Feedback, Tone, Dry and Echoes glide, in seconds (tune).
+inline constexpr double kGlideSeconds = 0.020;
+// The longest run() in samples.
+inline constexpr int kChunk = 256;
 
 // The Tone filter's pole for Tone 0..1 at `rate`: 0 at Tone 1 (the loop
 // untouched), about 1.5 kHz at Tone 0 (tune).
 float tone_pole(float tone, double rate);
+
+// A control gliding to its newest value in a straight line, `length`
+// samples from wherever it is. next() gives each sample's value; it reaches
+// the target exactly.
+struct Glide {
+    float value = 0, target = 0, step = 0;
+    int left = 0;
+    void reset(float v) {
+        value = target = v;
+        step = 0;
+        left = 0;
+    }
+    void set(float t, int length) {
+        if (t == target) return;
+        target = t;
+        left = length;
+        step = (t - value) / static_cast<float>(length);
+    }
+    float next() {
+        if (left > 0) {
+            if (--left == 0) value = target;
+            else value += step;
+        }
+        return value;
+    }
+};
 
 // Switching. A voice that is off is skipped: it reads and writes nothing.
 // Coming on, it restarts empty: `fresh_` counts the samples written since,
@@ -29,6 +63,11 @@ float tone_pole(float tone, double rate);
 // out and it then stops. Coming on again during that fade, the old echoes
 // (everything older than the restart) carry on fading out while the new
 // input fades in; a third life during that leaves only the newest two.
+//
+// Changing taps. New taps fade in over kFadeSeconds while the old fade out:
+// both loop reads and both sets of taps are read for that time. A change
+// during a fade waits as `pending_` and fades in when the fade ends, so a
+// knob dragged through many values costs at most two fades in a row.
 class Voice {
 public:
     Voice() = default;
@@ -57,85 +96,72 @@ public:
     }
     // The Voice n switch: fades in or out as above. Nothing if unchanged.
     void switch_to(bool on);
-    // On, or still fading out: process() must be called every sample.
+    // On, or still fading out: run() must be called for every sample.
     bool active() const { return on_ || out_ramp_ > 0 || old_ramp_ > 0; }
     bool on() const { return on_; }
 
     std::size_t size() const { return size_; }
     const float* data() const { return buffer_; }
 
-    // New settings, taking effect from the next sample. `taps.loop` and every
-    // delay must be below size().
-    void set(const Taps& taps, float feedback, float pole) {
-        taps_ = taps;
-        feedback_ = feedback;
-        pole_ = pole;
-    }
-    const Taps& taps() const { return taps_; }
+    // Settings taking effect at once, with no crossfade or glide: for a
+    // voice coming on, or at activate. Every read (`taps.loop` and every
+    // delay) must be below size() - kChunk.
+    void start(const Taps& taps, float feedback);
+    // New settings while playing: Feedback glides, new taps crossfade in.
+    void set(const Taps& taps, float feedback);
+    // The newest taps set, whether playing, fading in or pending.
+    const Taps& taps() const { return pending_set_ ? pending_ : next_; }
+    // Crossfades started since allocate (for the tests).
+    uint64_t fades() const { return fades_; }
 
-    // One sample of input in, one sample of the voice's echoes out. Only
-    // while active().
-    float process(float x) {
-        const long age = fresh_;  // samples written in this life, before this one
-        x *= gain(in_ramp_);
-        const float back = taps_.loop <= age ? buffer_[wrap(write_ - taps_.loop)] : 0.0f;
-        // One-pole low-pass: exactly `back` when the pole is 0. Kept out of
-        // the denormals as the loop dies away.
-        tone_ = back + pole_ * (tone_ - back);
-        if (std::fabs(tone_) < 1e-20f) tone_ = 0.0f;
-        const float looped = feedback_ * tone_;
-        const float y = x + looped;
-        buffer_[write_] = y;
-        // Step 0 reads y[t] itself, x[t] + looped; without the note, that
-        // is `looped`.
-        float now = taps_.zero ? looped : 0.0f, before = 0.0f;
-        for (int k = 0; k < taps_.count; ++k) {
-            const long d = taps_.delay[k];
-            const float s = buffer_[wrap(write_ - d)];
-            if (d <= age) now += s;
-            else if (d <= age + old_age_) before += s;  // the last life's echoes
-        }
-        float v = gain(out_ramp_) * now;
-        if (old_ramp_ > 0) {
-            // The last life's step 0 is its own loop read, filtered on.
-            const long loop = taps_.loop;
-            if (taps_.zero) {
-                const float old_back = loop > age && loop <= age + old_age_ ? buffer_[wrap(write_ - loop)] : 0.0f;
-                old_tone_ = old_back + pole_ * (old_tone_ - old_back);
-                before += feedback_ * old_tone_;
-            }
-            v += gain(old_ramp_) * before;
-        }
-        // The non-finite guard (docs/design.md, "Host limits"): empty the
-        // voice, silent until new input arrives.
-        if (!std::isfinite(y) || !std::isfinite(v)) {
-            buffer_[write_] = 0.0f;
-            empty();
-            v = 0.0f;
-        }
-        if (++write_ == static_cast<long>(size_)) write_ = 0;
-        if (fresh_ < static_cast<long>(size_)) ++fresh_;
-        if (in_ramp_ < fade_) ++in_ramp_;
-        if (!on_ && out_ramp_ > 0) --out_ramp_;
-        if (old_ramp_ > 0) --old_ramp_;
-        return v;
-    }
+    // `n` samples (at most kChunk) of input `x` in, the voice's echoes out
+    // into `v`; `pole` is the Tone filter's pole for each sample. Only while
+    // active(); if the voice stops during the run, the rest of `v` is 0 and
+    // nothing more is written.
+    //
+    // A run writes its samples of y first, one by one (each needs the loop
+    // read before it), then adds up each tap over the whole run: every
+    // tap's reads are in a row in the buffer, which keeps memory reads in
+    // order and lets the sums vectorise. Taps read only samples already
+    // written, since every D_k is above 0. The run is split where a
+    // crossfade ends, so its taps are fixed for each part.
+    void run(const float* x, const float* pole, float* v, int n);
 
 private:
     long wrap(long i) const { return i < 0 ? i + static_cast<long>(size_) : i; }
     float gain(int ramp) const { return ramp >= fade_ ? 1.0f : static_cast<float>(ramp) * inv_fade_; }
+    // Part of a run with fixed taps; returns false if the voice stopped.
+    bool part(const float* x, const float* pole, float* v, int n);
+    // Adds y[w0 + i - d] to sum[i] for i in [0, n).
+    void add_run(float* sum, long w0, long d, int n) const;
 
     float* buffer_ = nullptr;
     std::size_t size_ = 0;
     long write_ = 0;
-    Taps taps_;
-    float feedback_ = 0, pole_ = 0, tone_ = 0, old_tone_ = 0;
+    float tone_ = 0, old_tone_ = 0;
+    Glide feedback_;
+    int glide_ = 1;  // the glide in samples
+
+    // Taps: cur_ fading to next_ while fade_left_ > 0; equal otherwise.
+    Taps cur_, next_, pending_;
+    bool pending_set_ = false;
+    int fade_left_ = 0, fade_len_ = 1;
+    float inv_fade_len_ = 1;
+    uint64_t fades_ = 0;
+
     bool on_ = true;
     long fresh_ = 0;    // samples written since it came on, up to size_
     long old_age_ = 0;  // the last life's fresh_ when it came on again
     int fade_ = 1;      // the switch fade in samples
     float inv_fade_ = 1;
     int in_ramp_ = 1, out_ramp_ = 1, old_ramp_ = 0;  // 0..fade_
+
+    // Per sample of a part, from writing y to adding up the taps.
+    long age_[kChunk];                  // fresh_ before the sample
+    float a_[kChunk];                   // the crossfade, 0 old .. 1 new
+    float out_gain_[kChunk], old_gain_[kChunk];
+    float now_cur_[kChunk], now_next_[kChunk];  // this life, old and new taps
+    float old_cur_[kChunk], old_next_[kChunk];  // the last life's
 };
 
 } // namespace euclidelay
