@@ -15,11 +15,13 @@ SAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
 endif
 
 BUNDLE := $(BUILD_DIR)/euclidelay.lv2
-SOURCES := src/lv2_entry.cpp src/voice.cpp
+SOURCES := src/lv2_entry.cpp src/engine.cpp src/voice.cpp
 OBJECTS := $(patsubst src/%.cpp,$(BUILD_DIR)/obj/%.o,$(SOURCES))
 METADATA := manifest.ttl euclidelay.ttl
 TTL_TARGETS := $(addprefix $(BUNDLE)/,$(METADATA))
-TESTS := $(BUILD_DIR)/test_pattern $(BUILD_DIR)/test_voice $(BUILD_DIR)/test_lv2
+TESTS := $(BUILD_DIR)/test_pattern $(BUILD_DIR)/test_voice $(BUILD_DIR)/test_voices $(BUILD_DIR)/test_engine \
+	$(BUILD_DIR)/test_lv2
+ENGINE_OBJECTS := $(BUILD_DIR)/obj/engine.o $(BUILD_DIR)/obj/voice.o
 LV2_CFLAGS = $(shell $(PKG_CONFIG) --cflags lv2)
 # -fno-fast-math comes after OPT: the non-finite guard needs IEEE arithmetic
 # even when a host build passes -ffast-math in OPT.
@@ -50,6 +52,10 @@ $(BUILD_DIR)/test_voice: tests/test_voice.cpp $(BUILD_DIR)/obj/voice.o src/voice
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMPILE_FLAGS) $< $(BUILD_DIR)/obj/voice.o $(LDFLAGS) $(SAN_FLAGS) -o $@
 
+$(BUILD_DIR)/test_voices $(BUILD_DIR)/test_engine: $(BUILD_DIR)/%: tests/%.cpp tests/engine_run.hpp $(ENGINE_OBJECTS) src/engine.hpp src/voice.hpp src/pattern.hpp src/ports.hpp
+	@mkdir -p "$(@D)"
+	$(CXX) $(COMPILE_FLAGS) $< $(ENGINE_OBJECTS) $(LDFLAGS) $(SAN_FLAGS) -o $@
+
 $(BUILD_DIR)/test_lv2: tests/test_lv2.cpp src/ports.hpp
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMPILE_FLAGS) $< $(LDFLAGS) $(SAN_FLAGS) -ldl -o $@
@@ -58,6 +64,8 @@ test: all $(TESTS)
 	$(PYTHON) tests/ttl_check.py $(BUNDLE)
 	$(BUILD_DIR)/test_pattern
 	$(BUILD_DIR)/test_voice
+	$(BUILD_DIR)/test_voices
+	$(BUILD_DIR)/test_engine
 	$(BUILD_DIR)/test_lv2 $(BUNDLE)/euclidelay.so
 
 # jalv and Ingen on a private dummy JACK server (see tests/host_smoke.py).

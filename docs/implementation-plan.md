@@ -79,7 +79,7 @@ class Voice {
 };
 ```
 
-**Switching a voice.** `Off` skips the voice entirely: no reads, no writes. Going on: `fresh = 0`, `tone_z = 0`, the write position carries on, `cur = next = ` the current settings with no fade, state `Starting` while `gate` rises. While `fresh` is below a read's distance, that read returns 0. This stands in for clearing the buffer, which in `run()` would be a 6 MB `memset`. Once `fresh` passes the longest possible read (the buffer size), the check is skipped. Going off: state `Stopping` while `gate` falls, then `Off`. A switch back on during `Stopping` restarts as above, empty, so a quick off-on never brings back old echoes. `gate` multiplies the voice's output, not its input, so the fade out is immediate in sound.
+**Switching a voice.** `Off` skips the voice entirely: no reads, no writes. Going on: `fresh = 0`, `tone_z = 0`, the write position carries on, `cur = next = ` the current settings with no fade. While `fresh` is below a read's distance, that read returns 0. This stands in for clearing the buffer, which in `run()` would be a 6 MB `memset`. Once `fresh` reaches the buffer size it stops counting and every read is valid. Coming on, the voice's *input* fades in over 20 ms: its output has nothing to fade (the first echo is at least a step away), and a note already sounding must not enter the loop with a step, which every tap would repeat as a click. Going off, the voice's *output* fades out over 20 ms, so the fade is immediate in sound, then `Off`. A switch back on during that fade restarts as above, empty, so a quick off-on never brings back old echoes; but the old echoes are not cut. Everything older than the restart is the old life: taps reading further back than `fresh` (and within the old life's own `fresh`) carry on at the old fade's gain until it reaches 0, and the old life's step 0 keeps its own loop read and tone state for that time. A third switch during that fade keeps only the newest two lives. As implemented in milestone 2 (`src/voice.hpp`), the gains are integer ramps, so a fade lasts exactly its length in samples.
 
 `size` = `ceil(32.03 * rate) + 1`. No power-of-two rounding: that would make 8.4 MB a voice instead of 6.2 MB. Wrapping is one compare and subtract.
 
@@ -171,12 +171,12 @@ One voice, fixed settings, exactly right.
 
 The whole sound, with settings fixed while playing.
 
-- [ ] Four voices, each with its own controls, and the Voice n switches with their fades and the `fresh` count (section 3.1).
-- [ ] `test_voices` passing.
-- [ ] Level, Pan, Dry, Echoes; constant-power pan; the echo clipper.
-- [ ] Enabled: input fade into the loops, trails, dry at unity while off.
-- [ ] The non-finite guard; flush-to-zero.
-- [ ] `test_engine` passing.
+- [x] Four voices, each with its own controls, and the Voice n switches with their fades and the `fresh` count (section 3.1). `src/engine.hpp/.cpp` holds the four voices and the mix; `lv2_entry.cpp` only reads the ports into `Settings`.
+- [x] `test_voices` passing: the worst second difference while switching every voice in every way on a held sine is 8.3e-5 against a bound of 5e-4 (-40 dB of the input), 2.2e-5 with no switching.
+- [x] Level, Pan, Dry, Echoes; constant-power pan; the echo clipper (transparent to -6 dBFS, ceiling -0.2 dBFS, tanh between). Applied at the start of each slice, no smoothing yet (milestone 3).
+- [x] Enabled: input fade into the loops (10 ms), trails, dry at unity while off (the same fade crossfades Dry and unity).
+- [x] The non-finite guard: a non-finite input sample counts as silence and empties every voice; a voice whose loop or output overflows empties itself. Flush-to-zero (`FPCR.FZ` on arm64, MXCSR FTZ and DAZ on x86) for the length of `run()`, and the tone state flushed below 1e-20.
+- [x] `test_engine` passing. All tests also with `SAN=1`; `test_lv2` now slices all four voices with every global control moved; `make test-hosts` passes; lv2lint gives only the author e-mail warning.
 - [ ] **Done when** the default patch played with a guitar file in jalv or Carla sounds like the spec: two voices left and right, voices 3 and 4 come in when switched on, any combination of voices can be chosen while playing without clicks, and bypass by the Enabled port leaves trails.
 
 ### Milestone 3: changes while playing (tag `v0.0.4`)

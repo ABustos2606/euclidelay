@@ -72,7 +72,7 @@ Euclidelay takes one input and gives two outputs.
 
 - **Pan** runs from -1 (left) to 1 (right). Constant power: `gL = cos((Pan + 1) * pi / 4)`, `gR = sin((Pan + 1) * pi / 4)`, so a centred voice is -3 dB on each side (**tune**: a law with the centre at 0 dB may sit better beside the dry sound).
 - **Dry** (0 to 1, default 1) is the input on both outputs. **Echoes** (0 to 1, default 0.8, **tune**) is the level of all the voices that are on.
-- `clip` is a soft clipper on each echo side, transparent below about -6 dBFS (**tune**). Four voices of up to 16 hits can stack on a held chord. The clipper stops that from reaching full scale hard; it isn't a limiter, and Echoes is still the way to set the level.
+- `clip` is a soft clipper on each echo side, transparent below about -6 dBFS and never above -0.2 dBFS (**tune**). Four voices of up to 16 hits can stack on a held chord. The clipper stops that from reaching full scale hard; it isn't a limiter, and Echoes is still the way to set the level.
 
 ## On and off
 
@@ -86,7 +86,7 @@ Euclidelay takes one input and gives two outputs.
 Each voice has its own **Voice n** switch, so any one, two, three or four voices can play, in any combination (voices 1 and 3, say), not only the first few.
 
 - **Off:** the voice fades out over 20 ms (**tune**) and then stops: its echoes stop with it, and it costs no CPU. Its settings stay as they are, ready for when it comes back. Trails across a whole bypass are the job of Enabled, not of these switches.
-- **On:** the voice starts empty and takes the input from that moment; it never plays what was in its loop before it was switched off. Clearing a 6 MB buffer in `run()` would cost too much at once, so the voice instead counts the samples written since it came on and treats anything older as silence.
+- **On:** the voice starts empty and takes the input from that moment, faded in over 20 ms (**tune**) so a note already sounding enters without a click; it never plays what was in its loop before it was switched off. Switched on again while still fading out, its old echoes finish their fade while the new input comes in. Clearing a 6 MB buffer in `run()` would cost too much at once, so the voice instead counts the samples written since it came on and treats anything older as silence.
 - All four off: Euclidelay passes the dry sound only.
 - A voice that is on with Hits 0 or Level 0 is silent but still runs; Off is the way to save its CPU.
 
@@ -141,7 +141,7 @@ Voices 3 and 4 start off with their patterns ready: switching them on brings the
 - **No allocation, locks or I/O in `run()`.**
 - **Blocks may run on several threads;** instances share nothing.
 - **No LV2 state.** Everything is in control ports, so patches save them. The echoes in the buffers are not saved.
-- **Non-finite values.** If a voice's buffer ever holds a non-finite value, that voice's buffer is cleared at the next block and the voice is silent until new input arrives. This should never happen; it guards against a bad input sample.
+- **Non-finite values.** A non-finite input sample counts as silence and empties every voice; a voice whose loop or output would become non-finite empties itself at once. An emptied voice treats everything in its loop as silence (as when switched on) and is silent until new input arrives. The outputs are always finite. This should never happen; it guards against a bad input sample.
 
 ## Not in the first version
 
