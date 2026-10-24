@@ -59,7 +59,8 @@ class Protocol:
         self.sequence = 0
         self.transcript = transcript.open("w")
 
-    def request(self, verb, fields):
+    def request(self, verb, fields, expect=0):
+        """Sends a request; its response must have status `expect` (None: any). Returns the text."""
         self.sequence += 1
         message = (PREFIXES + f'[] a patch:{verb} ; patch:sequenceNumber '
                    f'"{self.sequence}"^^xsd:int ; {fields} .\n')
@@ -81,7 +82,8 @@ class Protocol:
                 sequence = re.search(r'patch:sequenceNumber "(\d+)"', match[1])
                 status = re.search(r'patch:body "(-?\d+)"', match[1])
                 if sequence and int(sequence[1]) == self.sequence and status:
-                    require(int(status[1]) == 0, f"Ingen {verb}: {text}")
+                    self.status = int(status[1])
+                    require(expect is None or self.status == expect, f"Ingen {verb}: {text}")
                     return text
 
     def close(self):
@@ -107,6 +109,8 @@ class Protocol:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path)
+    parser.add_argument("--refused", type=Path,
+                        help="also load this REFUSE_ALLOC=1 bundle in Ingen: adding it and loading a patch with it must fail cleanly")
     parser.add_argument("--ingen", default="ingen")
     parser.add_argument("--period", type=int, default=1024,
                         help="dummy JACK period (default: 1024, tolerant of WSL scheduling)")
@@ -146,10 +150,19 @@ def main():
         source = probe.outports.register("src")
         captures = [probe.inports.register(name) for name in ("cap_l", "cap_r")]
         observed = [np.nan, np.nan]
+        # dc: the source holds LEVEL; else silence, with one impulse of LEVEL
+        # when asked. record: the left output, block by block.
+        state = {"dc": True, "impulse": False, "record": None}
 
         @probe.set_process_callback
         def process(frames):
-            source.get_array()[:] = LEVEL
+            out = source.get_array()
+            out[:] = LEVEL if state["dc"] else 0
+            if state["impulse"]:
+                out[0] = LEVEL
+                state["impulse"] = False
+            if state["record"] is not None:
+                state["record"].append(captures[0].get_array().copy())
             for i, port in enumerate(captures):
                 data = port.get_array()
                 # Every sample the same, or NaN: a block that only matches on average fails.
@@ -159,6 +172,19 @@ def main():
 
         def hears(gain):
             return lambda: observed == [LEVEL * gain, LEVEL * gain]
+
+        def echo_delay(seconds):
+            """An impulse in; frames from the dry impulse to the first echo on the left."""
+            time.sleep(0.3)
+            state["record"] = []
+            state["impulse"] = True
+            time.sleep(seconds)
+            blocks, state["record"] = state["record"], None
+            left = np.concatenate(blocks)
+            loud = np.flatnonzero(np.abs(left) > 0.02 * LEVEL)
+            require(len(loud) >= 2, f"no echo heard in {seconds} s")
+            require(abs(left[loud[0]] - LEVEL) < 1e-6, f"the dry impulse came back as {left[loud[0]]}")
+            return int(loud[1] - loud[0])
 
         name = "euclidelay_jalv"
         host = launch("jalv", ["jalv", "-i", "-p", "-n", name, "-c", "dry=0.5", "-c", "echoes=0", URI])
@@ -199,6 +225,24 @@ def main():
             probe.connect(f"{client}:out_r", captures[1])
             protocol.set("ingen:/main/euclidelay/echoes", 0)
             wait_for(hears(1), f"Ingen: default Dry, Echoes 0, passes the input to both outputs, heard {observed}")
+
+            # The echoes follow BPM: voice 1 alone as a plain delay of one
+            # step (Steps 1, Hits 1), 1/16. Switching the voices off and on
+            # again empties their loops of the held level.
+            state["dc"] = False
+            for n in range(1, 5):
+                protocol.set(f"ingen:/main/euclidelay/voice_{n}", 0)
+            time.sleep(0.2)
+            for symbol, value in {"echoes": 1, "tone": 1, "step": 2, "steps_1": 1, "hits_1": 1,
+                                  "feedback_1": 0.5, "pan_1": 0, "voice_1": 1}.items():
+                protocol.set(f"ingen:/main/euclidelay/{symbol}", value)
+            for bpm in (120, 97):
+                protocol.set("ingen:/main/euclidelay/bpm", bpm)
+                want = round(0.25 * 60 / bpm * 48000)
+                got = echo_delay(0.5)
+                require(abs(got - want) <= 1, f"Ingen: at {bpm} BPM the echo came {got} frames after the dry, not {want}")
+            state["dc"] = True
+            print(f"PASS Ingen: the echo follows BPM (6000 frames at 120, 7423 at 97), {threads} threads", flush=True)
             for symbol, value in SAVED.items():
                 protocol.set(f"ingen:/main/euclidelay/{symbol}", value)
             wait_for(hears(SAVED["dry"]), f"Ingen: Dry {SAVED['dry']} on both outputs, heard {observed}")
@@ -220,6 +264,62 @@ def main():
             stop(engine)
             path.unlink(missing_ok=True)
             print(f"PASS Ingen: all {len(SAVED)} controls saved and restored, {threads} threads", flush=True)
+
+        if args.refused:
+            # The same URI, built to refuse its memory: what a host sees when
+            # instantiate fails. The other bundle is out of the path.
+            refused_lv2 = logdir / f"lv2-refused-{os.getpid()}"
+            shutil.rmtree(private_lv2, ignore_errors=True)
+            shutil.copytree(args.refused.resolve(), refused_lv2 / "euclidelay.lv2")
+            env["LV2_PATH"] = env["LV2_PATH"].replace(str(private_lv2), str(refused_lv2))
+            try:
+                host = launch("jalv-refused", ["jalv", "-i", "-n", "euclidelay_refused", URI])
+                host.stdin.close()
+                require(host.wait(timeout=10) != 0, "jalv: a refused instantiate must fail")
+                print("PASS jalv: exits with an error when instantiate fails", flush=True)
+
+                path = Path(f"/tmp/{server_name}-refused.sock")
+                engine = launch("ingen-refused", [args.ingen, "-e", "-f", "-s", server_name, "-n", "euclidelay_refused",
+                                                  "-S", str(path), "-E", "0", "-p", "4"])
+                wait_for(path.exists, "Ingen socket did not appear")
+                time.sleep(1)
+                protocol = Protocol(path, logdir / "protocol-refused.log")
+                protocol.request("Put", f"patch:subject <ingen:/main/euclidelay> ; patch:body "
+                                 f"[ a ingen:Block ; lv2:prototype <{URI}> ]", expect=9)
+                print("PASS Ingen: adding the block fails with status 9 (creation failed), "
+                      "which Peepo shows as \"Could not add Euclidelay: Engine could not create the object\"", flush=True)
+                require(engine.poll() is None, "Ingen exited after a refused add")
+                protocol.request("Get", "patch:subject <ingen:/main>")
+                print("PASS Ingen: carries on after a refused add, and describes its graph", flush=True)
+
+                # Loading a saved patch with the block, into /main as Peepo
+                # does, then describing the graph as Peepo does next. Ingen
+                # (Peepo's build, 23 October 2026) loads the rest with status 0
+                # and then crashes in ClientUpdate::put_port while describing
+                # the graph: any plugin whose instantiate fails does this, so it
+                # is reported, not failed, until Ingen is fixed.
+                saved = logdir / f"{server_name}-1.ingen"
+                protocol.request("Copy", f"patch:subject <{saved.as_uri()}> ; patch:destination <ingen:/main>",
+                                 expect=None)
+                loaded = protocol.status
+                require("Failed to instantiate" in (logdir / "ingen-refused.log").read_text(), "Ingen logs the failure")
+                try:
+                    described = protocol.request("Get", "patch:subject <ingen:/main>")
+                    require("ingen:/main/euclidelay>" not in described, "no block is left behind")
+                    print(f"PASS Ingen: a saved patch with the block loads without it (status {loaded}); "
+                          "Ingen carries on and logs the failure", flush=True)
+                except RuntimeError:
+                    time.sleep(0.5)
+                    require(engine.poll() is not None, "Ingen closed its socket but is still running")
+                    print(f"KNOWN Ingen defect: a saved patch with the block loads (status {loaded}), then Ingen "
+                          f"exits ({engine.returncode}) describing the graph; Peepo's engine would restart", flush=True)
+                protocol.close()
+                protocol = None
+                if engine.poll() is None:
+                    stop(engine)
+                path.unlink(missing_ok=True)
+            finally:
+                shutil.rmtree(refused_lv2, ignore_errors=True)
     finally:
         if protocol:
             protocol.close()

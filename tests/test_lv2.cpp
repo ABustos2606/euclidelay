@@ -6,6 +6,7 @@
 // other hosts run it. Also checks Dry * In on both sides with Echoes 0 or
 // every voice off, and voice 1's echoes and pan with an impulse.
 //   test_lv2 build/euclidelay.lv2/euclidelay.so
+//   test_lv2 --refused build/refuse/euclidelay.lv2/euclidelay.so  (make test-refuse)
 #include "../src/ports.hpp"
 #include <lv2/core/lv2.h>
 #include <dlfcn.h>
@@ -92,8 +93,9 @@ void dry_only(const Output& o, const std::vector<float>& x, float dry_gain, cons
 
 int main(int argc, char** argv) {
     try {
-        require(argc > 1, "usage: test_lv2 PLUGIN.so");
-        void* library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+        const bool refused = argc > 2 && std::strcmp(argv[1], "--refused") == 0;
+        require(argc == (refused ? 3 : 2), "usage: test_lv2 [--refused] PLUGIN.so");
+        void* library = dlopen(argv[refused ? 2 : 1], RTLD_NOW | RTLD_LOCAL);
         require(library, dlerror() ? dlerror() : "dlopen");
         using Get = const LV2_Descriptor* (*)(uint32_t);
         const auto get = reinterpret_cast<Get>(dlsym(library, "lv2_descriptor"));
@@ -101,6 +103,16 @@ int main(int argc, char** argv) {
         const LV2_Descriptor* d = get(0);
         require(std::strcmp(d->URI, kURI) == 0, "URI");
         require(!d->instantiate(d, 0, ".", nullptr), "instantiate refuses a sample rate of 0");
+        if (refused) {
+            // make REFUSE_ALLOC=1: the fourth buffer is refused, so instantiate
+            // must free the three it took and return null.
+            for (const double rate : {44100.0, 48000.0, 96000.0})
+                require(!d->instantiate(d, rate, ".", nullptr), "the refusing build returns null at " +
+                                                                    std::to_string(int(rate)) + " Hz");
+            std::puts("PASS test_lv2 --refused: instantiate returns null when memory is refused");
+            dlclose(library);
+            return 0;
+        }
         for (const double rate : {44100.0, 48000.0, 96000.0}) {
             LV2_Handle h = d->instantiate(d, rate, ".", nullptr);
             require(h, "instantiate at " + std::to_string(int(rate)) + " Hz");

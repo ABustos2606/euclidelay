@@ -179,8 +179,9 @@ void clipper() {
     }
     const Output o = play(sine(length, 1.0f, 200), s);
     double loudest = 0;
+    // std::max, not std::fmax: Debian 12's GCC 12 on arm64 crashes vectorising this loop.
     for (uint32_t i = 0; i < length; ++i)
-        loudest = std::fmax(loudest, std::fmax(std::fabs(o.left[i]), std::fabs(o.right[i])));
+        loudest = std::max(loudest, double(std::max(std::fabs(o.left[i]), std::fabs(o.right[i]))));
     require(loudest < 1.0 && loudest > 0.9, "a full-scale chord through every voice stays under 0 dBFS (" +
                                                 std::to_string(loudest) + ")");
 }

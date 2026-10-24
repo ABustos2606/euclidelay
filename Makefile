@@ -13,6 +13,13 @@ ifeq ($(SAN),1)
 override BUILD_DIR := $(BUILD_DIR)/san
 SAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
 endif
+# REFUSE_ALLOC=1: instantiate always fails (see src/engine.cpp), for checking
+# what a host shows. Never install it where a patch could load it.
+REFUSE_ALLOC ?= 0
+ifeq ($(REFUSE_ALLOC),1)
+override BUILD_DIR := $(BUILD_DIR)/refuse
+override CPPFLAGS += -DEUCLIDELAY_REFUSE_ALLOC
+endif
 
 BUNDLE := $(BUILD_DIR)/euclidelay.lv2
 SOURCES := src/lv2_entry.cpp src/engine.cpp src/voice.cpp
@@ -28,7 +35,7 @@ LV2_CFLAGS = $(shell $(PKG_CONFIG) --cflags lv2)
 COMPILE_FLAGS = $(CPPFLAGS) $(LV2_CFLAGS) $(CXXFLAGS) $(OPT) -std=c++17 -fPIC \
 	-fvisibility=hidden -Wall -Wextra -fno-fast-math -fno-math-errno -fno-trapping-math $(SAN_FLAGS)
 
-.PHONY: all install test test-hosts lint clean
+.PHONY: all install test test-refuse test-hosts lint clean
 all: $(BUNDLE)/euclidelay.so $(TTL_TARGETS)
 
 $(BUILD_DIR)/obj/%.o: src/%.cpp
@@ -70,9 +77,16 @@ test: all $(TESTS)
 	$(BUILD_DIR)/test_lv2 $(BUNDLE)/euclidelay.so
 	$(BUILD_DIR)/test_timing $(BUNDLE)/euclidelay.so
 
+# The refusing build: instantiate returns null at every rate and frees what it
+# took (with SAN=1, the leak checker says so).
+test-refuse:
+	$(MAKE) REFUSE_ALLOC=1 all $(BUILD_DIR)/refuse/test_lv2
+	$(BUILD_DIR)/refuse/test_lv2 --refused $(BUILD_DIR)/refuse/euclidelay.lv2/euclidelay.so
+
 # jalv and Ingen on a private dummy JACK server (see tests/host_smoke.py).
 test-hosts: all
-	$(PYTHON) tests/host_smoke.py $(BUNDLE)
+	$(MAKE) REFUSE_ALLOC=1 all
+	$(PYTHON) tests/host_smoke.py $(BUNDLE) --refused $(BUILD_DIR)/refuse/euclidelay.lv2
 
 install: all
 	install -d "$(DESTDIR)$(LV2DIR)/euclidelay.lv2"

@@ -73,8 +73,14 @@ bool Engine::allocate(double rate) {
     inv_enable_fade_ = 1.0f / static_cast<float>(enable_fade_);
     glide_ = static_cast<int>(std::lround(kGlideSeconds * rate));
     if (glide_ < 1) glide_ = 1;
-    for (Voice& v : voices_)
+    for (Voice& v : voices_) {
+#ifdef EUCLIDELAY_REFUSE_ALLOC
+        // make REFUSE_ALLOC=1: a build whose fourth buffer is refused, as when
+        // memory runs out, for checking what a host shows when instantiate fails.
+        if (&v == &voices_[kVoices - 1]) return false;
+#endif
         if (!v.allocate(kBufferSeconds, rate)) return false;
+    }
     // A run writes its samples before its taps read them, so it must not
     // write over anything its longest read still needs: the buffer's room
     // beyond the longest loop (16 steps of 1/4 at 30 BPM), 30 ms.

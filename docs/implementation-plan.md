@@ -17,7 +17,7 @@ From Discipline's plan (section 1), unchanged:
 
 - **Plain LV2 C API in C++17**, no DPF. One shared object, `euclidelay.so`, in `euclidelay.lv2/` beside `manifest.ttl` and `euclidelay.ttl`.
 - **License:** GPL-2.0-or-later. **Dependencies:** `lv2-dev` headers only; the tests need `python3-rdflib`.
-- **Makefile**, no configure step, no network, as in Sway and Discipline: `make`, `make install` (`DESTDIR`, `PREFIX`, `LV2DIR`), `make test`, `make lint` (lv2lint if on the path), `OPT` (default `-O2`; the Pi build passes `OPT="-O2 -mcpu=cortex-a76"`) and `SAN=1` (address and undefined-behaviour sanitizers for the tests).
+- **Makefile**, no configure step, no network, as in Sway and Discipline: `make`, `make install` (`DESTDIR`, `PREFIX`, `LV2DIR`), `make test`, `make lint` (lv2lint if on the path), `OPT` (default `-O2`; the Pi build passes `OPT="-O2 -mcpu=cortex-a76"`) `SAN=1` (address and undefined-behaviour sanitizers for the tests), `make test-hosts` (jalv and Ingen, `tests/host_smoke.py`) and `REFUSE_ALLOC=1` (a build whose `instantiate` always fails, in `build/refuse/`; `make test-refuse` checks it).
 - **Flags:** `-std=c++17 -fPIC -fvisibility=hidden -Wall -Wextra -fno-math-errno -fno-trapping-math`, then `-fno-fast-math` after `OPT`: the non-finite guard needs IEEE arithmetic. Only `lv2_descriptor` is exported (`src/exports.map`).
 
 ### Repository layout
@@ -38,6 +38,7 @@ src/
     lv2_entry.cpp            descriptor, instantiate, connect, activate, run, cleanup
 tools/
     gen_patterns.sh          writes tests/patterns_peepo.inc from Peepo's euclidean.hpp (run by hand)
+    pi_measure.py            on the Pi: a typical patch in a private Ingen, xruns, DSP load and memory (milestone 4)
 tests/
     ttl_check.py
     patterns_peepo.inc       every (steps, hits, shift) up to 16, as Peepo draws them (generated data)
@@ -48,8 +49,9 @@ tests/
     test_voices.cpp          switching voices on and off
     test_lv2.cpp             dlopen the .so, run it sliced as Ingen does
     test_timing.cpp          10 simulated minutes of random controls
+    host_smoke.py            jalv and Ingen on a private JACK server (make test-hosts)
 docs/
-    design.md, implementation-plan.md
+    design.md, implementation-plan.md, milestone-4-validation.md
 ```
 
 **Why a generated table.** Peepo's `euclidean.hpp` is GPL-3.0, so its code cannot be copied into a GPL-2.0-or-later plugin. `pattern.hpp` is written from the spec's three rules. `tools/gen_patterns.sh` compiles a small program against Peepo's header (read from `C:\Pedal PI`, never copied) under WSL, prints all 16 x 17 x 16 patterns, and writes `tests/patterns_peepo.inc`. The table is data and is committed; the program is not. `test_pattern` then checks every entry.
@@ -127,7 +129,7 @@ Worst case per sample, all four voices on: 4 x (2 loop reads + 32 taps in a fade
 | `test_engine` | pan law at -1, 0, 1; Dry and Echoes; four voices sum; Enabled off lets the loops ring out with the dry sound at unity, and back on; a held full-scale sine with all voices at 16 hits stays under 0 dBFS through the clipper; a NaN input clears the voice and the output stays finite; every one of the 16 on/off combinations of the four voices gives the sum of exactly the voices that are on; all off gives the dry sound only |
 | `test_voices` | a voice switched off fades out within 20 ms and then reads and writes nothing (its buffer is untouched afterwards); switched on again after echoes were in its loop, it plays none of them, only what came in after; off and on again within the fade does the same; switching causes no jump above the `test_changes` bound |
 | `test_changes` | each crossfaded control changed during a held sine: no sample-to-sample jump above a bound (**tune**, about -40 dB of the signal) at the moment of change; a knob dragged through 16 values costs at most two fades; a tempo change fades all four voices |
-| `test_lv2` | dlopen the built `.so`; one descriptor with the URI; the same input run sliced at random points (pointers moved per slice, as Ingen does) and unsliced, with fixed controls, matches sample for sample |
+| `test_lv2` | dlopen the built `.so`; one descriptor with the URI; the same input run sliced at random points (pointers moved per slice, as Ingen does) and unsliced, with fixed controls, matches sample for sample; `--refused` (`make test-refuse`): the `REFUSE_ALLOC=1` build returns null and frees what it took |
 | `test_timing` | 10 simulated minutes with random control changes every few blocks at 48 kHz and a 128-frame period: no non-finite output, the output within Dry and the clipper's ceiling, and the block times printed; the 99.9th percentile must stay under a budget of 25% of the period on the build machine (the worst block is printed too; on a desktop it mostly measures scheduling) |
 
 ### 5.2 Desktop hosts
@@ -192,12 +194,12 @@ Every control can move during a note without a click.
 
 ### Milestone 4: Ingen and the Pi (tag `v0.1.0`)
 
-- [ ] WSL Ingen as in section 5.3, including save and reload, and patch tempo following once the overlay names `bpm` (milestone 5 can be done locally first).
-- [ ] What Peepo shows when `instantiate` fails (simulate it with a build that refuses to allocate).
-- [ ] Pi: built in Peepo's arm64 build root and installed from there, so the next package does not wipe it. Section 5.4 measured: xruns, DSP load, memory, with one voice on and with all four. Two instances in one patch as well (about 50 MB).
-- [ ] If memory or CPU is too high: lower the longest loop (fewer steps, or Step up to 1/8) in the spec first, before any patch is saved.
-- [ ] README status updated.
-- [ ] **Done when** 30 minutes on the Pi give no xruns traceable to Euclidelay and the numbers are recorded.
+- [x] WSL Ingen as in section 5.3 (`make test-hosts`, 1 and 4 threads): every control saved and reloaded, and the echoes follow `bpm` set through Ingen (6000 frames at 120 BPM, 7423 at 97, for one 1/16 step). Patch tempo following needs the overlay's `"tempo": "bpm"`, so it moves to milestone 5; playing a recorded guitar file is still to do.
+- [x] What Peepo shows when `instantiate` fails: `make REFUSE_ALLOC=1` and `make test-refuse`. Adding the module is refused with Ingen's status 9, which Peepo shows as "Could not add Euclidelay: Engine could not create the object" (from Peepo's source). **Loading a saved patch with it crashes Ingen** when the graph is next described, for any plugin whose `instantiate` fails; an Ingen bug for Peepo to fix ([validation](milestone-4-validation.md)).
+- [x] Pi: built and tested in Peepo's arm64 build root and installed into its `/opt/peepo/lib/lv2`, the same bundle copied to the Pi. `make test` natively on the Pi (it needed a workaround for a GCC 12 arm64 internal compiler error in two test loops): `test_timing` median 16.4 us, p99.9 110.5 us, worst 269 us against 667 us. Section 5.4 with `tools/pi_measure.py`, 55 minutes: 25.0 MiB resident an instance, about 1.3 points of mean DSP load for one instance with four voices and 3.2 for two.
+- [x] Memory and CPU are fine: the longest loop stays at 32 s.
+- [x] README status updated.
+- [ ] **Done when** 30 minutes on the Pi give no xruns traceable to Euclidelay and the numbers are recorded. Recorded 24 October 2026: xruns at the same rate with and without Euclidelay (about 2 to 6 a minute), caused by the Pi's power supply (under-voltage, `0x50005`). To be measured again with the new supply.
 
 ### Milestone 5: Peepo integration (in Peepo's repository)
 
@@ -208,6 +210,8 @@ Not in this repository; listed so nothing is forgotten.
 - [ ] Overlay entry: name Euclidelay, category Delay, a description that says what it does (for example "Echoes on four Euclidean rhythms. Each voice loops its pattern with feedback, with its own level and pan."), `"bypass": "port"`, `"tempo": "bpm"`, groups: Main (Step, Echoes, Dry, Tone) and one per voice (Voice n, Steps, Hits, Shift, Feedback, Level, Pan). If the module page caps a group's size, split each voice into Pattern n and Sound n.
 - [ ] Regenerate `docs/33-module-list.md` with `tools/document-catalogue.py`, and grep the catalogue export for the URI before saying it is offered.
 - [ ] A module page check on Windows (`peepo_ui_check`) with 37 controls on one page.
+- [ ] Patch tempo: change it in Peepo with Euclidelay in the patch and check the `bpm` control and the echoes follow (moved here from milestone 4).
+- [ ] In Peepo's Ingen: loading a saved patch whose block fails to `instantiate` crashes the engine when the graph is next described ([milestone 4 validation](milestone-4-validation.md)); report or patch it.
 
 ### Later
 
@@ -218,8 +222,8 @@ Not in this repository; listed so nothing is forgotten.
 
 | Item | Why it matters | What is done about it |
 | --- | --- | --- |
-| Memory | 24.6 MB an instance at 48 kHz on a 2 GB Pi | Measured in milestone 4; the longest loop can still shrink before patches exist |
-| Cache misses | Taps read 6 MB buffers at scattered places | Block-wise tap reads (section 3.3); measured on the Pi |
+| Memory | 24.6 MB an instance at 48 kHz on a 2 GB Pi | Measured in milestone 4: 25.0 MiB resident an instance; two leave 1.5 GiB free. The longest loop stays at 32 s |
+| Cache misses | Taps read 6 MB buffers at scattered places | Block-wise tap reads (section 3.3); on the Pi, about 1.3 points of mean DSP load for four busy voices (milestone 4) |
 | Loud stacking | Up to 64 taps on a held chord | Echoes level, soft clipper, tested |
 | Clicks on change | Pattern and tempo changes move every read | Crossfades with one pending setting; `test_changes` |
 | Patterns differ from the Euclidean module | Users will set both side by side | Tested against Peepo's own function, every combination |

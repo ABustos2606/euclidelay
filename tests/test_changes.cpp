@@ -268,7 +268,8 @@ void smooth(const std::string& what, const std::function<void(Settings&)>& edit)
     const Output o = play(x, [&](uint32_t f) { return f < change ? before : after; }, 8);
     const Output same = play(x, [&](uint32_t) { return before; }, 8);
     double moved = 0;
-    for (uint32_t i = change; i < length; ++i) moved = std::fmax(moved, std::fabs(o.left[i] - same.left[i]));
+    // std::max, not std::fmax: Debian 12's GCC 12 on arm64 crashes vectorising this loop.
+    for (uint32_t i = change; i < length; ++i) moved = std::max(moved, double(std::fabs(o.left[i] - same.left[i])));
     require(moved > 0.001, what + ": the change is heard (" + std::to_string(moved) + ")");
     const double k = kink(o);
     std::printf("  %-26s worst second difference %.2e (bound %.1e)\n", what.c_str(), k, bound);

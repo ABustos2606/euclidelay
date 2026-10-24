@@ -98,7 +98,7 @@ Each voice has its own **Voice n** switch, so any one, two, three or four voices
 
 ## Memory
 
-Each voice's buffer holds the longest loop plus the 30 ms fade: 32.03 s. At 48 kHz that is 1.54 M floats, 6.2 MB per voice and **24.6 MB** per instance. At 96 kHz it doubles. All of it is allocated in `instantiate` and zeroed in `activate`, never in `run()`. If an instance can't get its memory, `instantiate` returns null; it never runs with less. (How Peepo shows a failed instantiation is checked in milestone 4.)
+Each voice's buffer holds the longest loop plus the 30 ms fade: 32.03 s. At 48 kHz that is 1.54 M floats, 6.2 MB per voice and **24.6 MB** per instance. At 96 kHz it doubles. All of it is allocated in `instantiate` and zeroed in `activate`, never in `run()`. If an instance can't get its memory, `instantiate` returns null; it never runs with less. Peepo then refuses to add the module ("Could not add Euclidelay: Engine could not create the object"); loading a saved patch with it currently crashes Ingen, an Ingen bug for Peepo (see [milestone 4](milestone-4-validation.md)). Measured on the Pi: 25.0 MiB resident an instance.
 
 ## Ports
 
