@@ -7,8 +7,9 @@ GPL-2.0-or-later, Copyright (c) 2026 Alejandro Bustos; see [LICENSE](LICENSE).
 runs in Peepo's Ingen (save and reload keep every control) and on the Pi,
 built in Peepo's arm64 build root. One instance takes 25 MiB and, with all
 four voices busy, about 1.3% more DSP load. The xrun check is to be run
-again once the Pi has a better power supply. Peepo does not list it yet
-(milestone 5).
+again once the Pi has a better power supply. Milestone 5: Peepo pins this
+commit and lists it (Delay), and its patch tempo moves the echoes to the
+sample; the Pi's installed catalogue does not offer it yet.
 
 Euclidelay has four voices, each switched on or off on its own, so one, two,
 three or four can play in any combination. Each voice spreads a number of

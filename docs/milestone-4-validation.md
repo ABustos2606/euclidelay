@@ -64,5 +64,5 @@ Run 24 October 2026, 00:10 to 01:06; the raw results are in [pi-measure-20261024
 ## Still to do
 
 - Listening: a guitar through Euclidelay in Ingen (WSL or the Pi), and the milestone 1 to 3 listening checks.
-- Peepo integration (milestone 5): pin the commit, inventory, overlay with `"tempo": "bpm"` and `"bypass": "port"`; then patch tempo following and the module page on the Pi.
-- In Peepo: the Ingen crash on loading a patch with a block whose `instantiate` fails.
+- Peepo integration (milestone 5): done in Peepo on 23 October 2026 (its `docs/43-euclidelay.md`); the module page on the Pi's touchscreen is still to see.
+- The Ingen crash: milestone 5 found the cause, a race rather than the failed block. Describing a graph read its ports from the process thread's array, which a load's new ports reach only at the next cycle; a block that instantiates takes long enough to hide it. Peepo's engine patch 0011 fixes it (`host_smoke.py` then passes the refused load 4 times in 4); Peepo's engines run it once rebuilt.

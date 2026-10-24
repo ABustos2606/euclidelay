@@ -203,15 +203,15 @@ Every control can move during a note without a click.
 
 ### Milestone 5: Peepo integration (in Peepo's repository)
 
-Not in this repository; listed so nothing is forgotten.
+Not in this repository; listed so nothing is forgotten. Done 23 October 2026; the record is Peepo's `docs/43-euclidelay.md`.
 
-- [ ] Pin the commit of `v0.1.0` in `tools/ingen-spike/14-more-plugins.sh` (`make` with `OPT` and `LV2DIR=/opt/peepo/lib/lv2 install`).
-- [ ] URI in `config/catalogue/inventory.txt`.
-- [ ] Overlay entry: name Euclidelay, category Delay, a description that says what it does (for example "Echoes on four Euclidean rhythms. Each voice loops its pattern with feedback, with its own level and pan."), `"bypass": "port"`, `"tempo": "bpm"`, groups: Main (Step, Echoes, Dry, Tone) and one per voice (Voice n, Steps, Hits, Shift, Feedback, Level, Pan). If the module page caps a group's size, split each voice into Pattern n and Sound n.
-- [ ] Regenerate `docs/33-module-list.md` with `tools/document-catalogue.py`, and grep the catalogue export for the URI before saying it is offered.
-- [ ] A module page check on Windows (`peepo_ui_check`) with 37 controls on one page.
-- [ ] Patch tempo: change it in Peepo with Euclidelay in the patch and check the `bpm` control and the echoes follow (moved here from milestone 4).
-- [ ] In Peepo's Ingen: loading a saved patch whose block fails to `instantiate` crashes the engine when the graph is next described ([milestone 4 validation](milestone-4-validation.md)); report or patch it.
+- [x] Pin the commit of `v0.1.0` in `tools/ingen-spike/14-more-plugins.sh` (`make` with `OPT` and `LV2DIR=/opt/peepo/lib/lv2 install`): `4ee5c87`, also in `reference/manifest.json`. Tagging it is the user's.
+- [x] URI in `config/catalogue/inventory.txt` (through `tools/catalogue-inventory.py`).
+- [x] Overlay entry: name Euclidelay, category Delay, `"bypass": "port"`, `"tempo": "bpm"`, groups Main (Step, Echoes, Dry, Tone), Voice 1 to 4 (Voice n, Steps, Hits, Shift, Feedback, Level, Pan) and Tempo and output (BPM, the general Output). The page does not cap a group's size, so the voices were not split.
+- [x] Exported alone in WSL and on the Pi (identical records: available, 33 controls) and merged into Peepo's WSL fixture and a Pi evidence export with Peepo's new `tools/merge-catalogue.py`; `docs/33-module-list.md` regenerated (Ready, Delay). The Pi's installed catalogue does not list it yet, so the instrument does not offer it.
+- [x] A module page check on Windows (`peepo_ui_check`), from the WSL fixture and the overlay: 34 bars on one page (33 controls and the general Output; Enabled is the bypass and not shown), in group order. The full Windows `ctest` passes.
+- [x] Patch tempo, through Peepo's adapter in WSL (`tools/ingen-spike/26-euclidelay.sh`): `bpm` follows 97, 143 and 100, a patch saved at 87 comes back at 87, and the echoes are on their steps to the sample. Still to try from the Tempo page on the instrument.
+- [x] In Peepo's Ingen: the crash when the graph is described after loading a patch whose block fails to `instantiate` is a race in describing a graph whose ports are being created. Engine patch 0011 fixes it; checked against a scratch build, not yet built into WSL's or the Pi's engine.
 
 ### Later
 
